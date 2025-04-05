@@ -4,7 +4,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 
 module Task2 where
-
+import Control.Monad (foldM)
 import Task1 (Parse, Parse(..))
 
 -- * Expression data type
@@ -42,14 +42,40 @@ data IntOp = Add | Mul | Sub
 -- Nothing
 --
 instance (Parse a, Parse op) => Parse (Expr a op) where
-  parse = error "TODO: define parse (Parse (Expr a op))"
+  parse = parseRPN . words
 
+parseRPN :: (Parse a, Parse op) => [String] -> Maybe (Expr a op)
+parseRPN tokens = case foldM step [] tokens of
+  Just [e] -> Just e
+  _        -> Nothing
+  where
+    step :: (Parse a, Parse op) => [Expr a op] -> String -> Maybe [Expr a op]
+    step stack token
+      | Just n <- parse token = Just (Lit n : stack)
+      | Just op <- parse token =
+          case stack of
+            (y:x:rest) -> Just (BinOp op x y : rest)
+            _          -> Nothing
+      | all (`elem` ['a'..'z'] ++ ['A'..'Z']) token = Just (Var token : stack)
+      | otherwise = Nothing
+    
 -- * Evaluation
 
 -- | Class of evaluatable types
 class Eval a op where
   -- | Evaluates given binary operation with provided arguments
   evalBinOp :: op -> a -> a -> a
+
+instance Eval Integer IntOp where
+  evalBinOp Add = (+)
+  evalBinOp Mul = (*)
+  evalBinOp Sub = (-)
+
+instance Parse IntOp where
+  parse "+" = Just Add
+  parse "-" = Just Sub
+  parse "*" = Just Mul
+  parse _   = Nothing
 
 -- | Evaluates given 'Expr' using given association list of variable values
 --
@@ -65,8 +91,12 @@ class Eval a op where
 -- Nothing
 --
 evalExpr :: (Eval a op) => [(String, a)] -> Expr a op -> Maybe a
-evalExpr = error "TODO: define evalExpr"
-
+evalExpr _ (Lit x) = Just x
+evalExpr env (Var v) = lookup v env
+evalExpr env (BinOp op e1 e2) = do
+  x <- evalExpr env e1
+  y <- evalExpr env e2
+  return $ evalBinOp op x y
 -- | Parses given integer expression in Reverse Polish Notation and evaluates it
 -- using given association list of variable values
 --
@@ -89,7 +119,7 @@ evalExpr = error "TODO: define evalExpr"
 -- Nothing
 --
 evaluateInteger :: [(String, Integer)] -> String -> Maybe Integer
-evaluateInteger = error "TODO: define evaluateInteger"
+evaluateInteger env expr = evalExpr env =<< (parse expr :: Maybe (Expr Integer IntOp))
 
 -- | Parses given expression in Reverse Polish Notation and evaluates it
 -- using given association list of variable values
@@ -100,11 +130,11 @@ evaluateInteger = error "TODO: define evaluateInteger"
 -- The 'Reify' function is required to reconcile generic type
 -- of intermediate 'Expr' expression with concrete type using 'a' and 'op'.
 --
+
 evaluate :: (Eval a op, Parse a, Parse op) => Reify a op -> [(String, a)] -> String -> Maybe a
 evaluate reify m s = case parse s of
   Just e -> evalExpr m (reify e)
   Nothing -> Nothing
-
 -- * Helpers
 
 -- | Helper type for specifying 'Expr' with

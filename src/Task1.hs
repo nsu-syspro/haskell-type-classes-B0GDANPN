@@ -2,7 +2,7 @@
 -- The above pragma enables all warnings
 
 module Task1 where
-
+import Control.Monad (foldM)
 -- * Expression data type
 
 -- | Representation of integer arithmetic expressions comprising
@@ -28,8 +28,9 @@ data IExpr =
 -- 9
 --
 evalIExpr :: IExpr -> Integer
-evalIExpr = error "TODO: define evalIExpr"
-
+evalIExpr (Lit n)      = n
+evalIExpr (Add e1 e2)  = evalIExpr e1 + evalIExpr e2
+evalIExpr (Mul e1 e2)  = evalIExpr e1 * evalIExpr e2
 -- * Parsing
 
 -- | Class of parseable types
@@ -54,9 +55,33 @@ class Parse a where
 -- >>> parse "2 3" :: Maybe IExpr
 -- Nothing
 --
-instance Parse IExpr where
-  parse = error "TODO: define parse (Parse IExpr)"
+instance Parse Integer where -- for task2 need
+  parse s = case reads s of
+    [(n, "")] -> Just n
+    _         -> Nothing
 
+instance Parse Bool where
+  parse "True"  = Just True
+  parse "False" = Just False
+  parse _       = Nothing
+
+instance Parse IExpr where
+  parse s = case foldM step [] (words s) of
+              Just [expr] -> Just expr
+              _           -> Nothing
+    where
+      step :: [IExpr] -> String -> Maybe [IExpr]
+      step (x:y:rest) "+" = Just (Add y x : rest)
+      step _          "+" = Nothing
+      step (x:y:rest) "*" = Just (Mul y x : rest)
+      step _          "*" = Nothing
+      step stack token = case readMaybe token of
+                          Just n -> Just (Lit n : stack)
+                          _      -> Nothing
+readMaybe :: String -> Maybe Integer
+readMaybe input = case reads input of
+                  [(n, "")] -> Just n
+                  _         -> Nothing
 -- * Evaluation with parsing
 
 -- | Parses given expression in Reverse Polish Notation and evaluates it
@@ -77,4 +102,4 @@ instance Parse IExpr where
 -- Nothing
 --
 evaluateIExpr :: String -> Maybe Integer
-evaluateIExpr = error "TODO: define evaluateIExpr"
+evaluateIExpr = fmap evalIExpr . parse
